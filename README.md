@@ -16,7 +16,7 @@
 ### 2. 非阻塞状态机
 `daemon.py` 使用状态机替代阻塞式 sleep：
 ```
-IDLE  ──Edge启动──▶  WAIT_EXTENSION (2s)  ──到时──▶  WAIT_CODE (8s)
+IDLE  ──Edge启动──▶  WAIT_EXTENSION (2s)  ──到时──▶  WAIT_CODE (3s)
   │▲                                                     │
   │└───────────── Edge关闭（任意状态）──────────────────────┘
   │
@@ -37,7 +37,7 @@ IDLE  ──Edge启动──▶  WAIT_EXTENSION (2s)  ──到时──▶  WAI
 `EnumWindows` → 找 `iCloudPasswordsExtensionHelper.exe` 进程的 `#32770` 对话框 → `EnumChildWindows` 找 `Static` 控件 → 正则 `\d{3}\s+\d{3}` 提取 6 位验证码。基于 Win32 窗口文本读取，无需 OCR。
 
 ### 5. 自动输入
-`keybd_event`（传统 Win32 API）逐位发送数字虚拟键码，绕过 UIPI（AppContainer 阻止 `SendInput`）。每位数间隔 8ms，配合 Edge PIN 输入框的自动跳转。
+`keybd_event`（传统 Win32 API）逐位发送数字虚拟键码，绕过 UIPI（AppContainer 阻止 `SendInput`）。每位数间隔 15ms，配合 Edge PIN 输入框的自动跳转。
 
 ### 6. 输入期间锁键盘
 `BlockInput(True)` 屏蔽物理键盘防止误触，输入完成后 `BlockInput(False)` 恢复。需管理员权限，普通权限下跳过并提示。

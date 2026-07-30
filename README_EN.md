@@ -16,7 +16,7 @@ When using iCloud Passwords with the Edge extension on Windows, a 6-digit verifi
 ### 2. Non-Blocking State Machine
 `daemon.py` uses a state machine instead of blocking `sleep()`:
 ```
-IDLE  ──Edge start──▶  WAIT_EXTENSION (2s)  ──timeout──▶  WAIT_CODE (8s)
+IDLE  ──Edge start──▶  WAIT_EXTENSION (2s)  ──timeout──▶  WAIT_CODE (3s)
   │▲                                                         │
   │└──────────── Edge close (any state) ──────────────────────┘
   │
@@ -37,7 +37,7 @@ IDLE  ──Edge start──▶  WAIT_EXTENSION (2s)  ──timeout──▶  WA
 `EnumWindows` → find `#32770` dialog owned by `iCloudPasswordsExtensionHelper.exe` → `EnumChildWindows` to locate `Static` controls → regex `\d{3}\s+\d{3}` extracts the 6-digit code. Pure Win32 window-text reading — no OCR needed.
 
 ### 5. Auto-Typing
-`keybd_event` (legacy Win32 API) sends digit virtual-key codes one by one, bypassing UIPI (AppContainer blocks `SendInput`). 8 ms inter-digit delay to match Edge's PIN field auto-advance.
+`keybd_event` (legacy Win32 API) sends digit virtual-key codes one by one, bypassing UIPI (AppContainer blocks `SendInput`). 15 ms inter-digit delay to match Edge's PIN field auto-advance.
 
 ### 6. Keyboard Locking During Input
 `BlockInput(True)` disables physical keyboard and mouse input during auto-type to prevent accidental interference. `BlockInput(False)` restores it afterward. Requires administrator privileges; skipped with a tip message if not elevated.
