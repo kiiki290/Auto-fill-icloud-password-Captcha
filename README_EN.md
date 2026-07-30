@@ -49,7 +49,7 @@ IDLE  ──Edge start──▶  WAIT_EXTENSION (2s)  ──timeout──▶  WA
 - **Dynamic polling interval**: 1 s when idle, 0.5 s when active
 
 ### 8. Logging
-`print()` to terminal with timestamps. Zero file I/O.
+`print()` to terminal and `daemon.log`, with timestamps.
 
 ## Requirements
 
@@ -77,13 +77,13 @@ python auto_fill_icloud.py
 
 ```bash
 pip install pyinstaller
-pyinstaller --onedir --noconsole --uac-admin --name iCloudAutoFill daemon.py
+pyinstaller --onedir --uac-admin --hide-console hide-early --name iCloudAutoFill daemon.py
 ```
 
 Output is in `dist/iCloudAutoFill/` — run `iCloudAutoFill.exe`.
 
 - `--onedir`: single-process ( `--onefile` produces two processes due to the bootloader extraction step)
-- `--noconsole`: no console window, runs silently in the background
+- `--hide-console hide-early`: bootloader hides the console before Python starts — zero flash. The console subsystem is still present (`console=True`) so the tray icon can show/hide it
 - `--uac-admin`: requests administrator privileges on launch (required for `BlockInput` keyboard locking)
 
 ## File Structure
@@ -93,6 +93,7 @@ Output is in `dist/iCloudAutoFill/` — run `iCloudAutoFill.exe`.
 ├── edge_uia.py            # Edge window lookup + IME switching + Alt+I shortcut
 ├── edge_watcher.py        # Edge window lifecycle monitoring (window-based detection)
 ├── daemon.py              # Daemon entry point (state machine dispatcher)
+├── tray.py                # System tray integration (icon, menu, console show/hide)
 ├── tools/                 # Diagnostic/debug scripts
 ├── requirements.txt
 ├── .gitignore

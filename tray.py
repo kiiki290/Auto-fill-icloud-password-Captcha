@@ -49,10 +49,8 @@ NIF_SHOWTIP      = 0x00000080
 # Window messages
 WM_USER          = 0x0400
 WM_NULL          = 0x0000
-WM_CREATE        = 0x0001
 WM_DESTROY       = 0x0002
 WM_COMMAND       = 0x0111
-WM_SYSCOMMAND    = 0x0112
 WM_LBUTTONUP     = 0x0202
 WM_RBUTTONUP     = 0x0205
 
@@ -66,7 +64,6 @@ SW_HIDE          = 0
 SW_SHOW          = 5
 SW_RESTORE       = 9
 SC_CLOSE         = 0xF060
-SC_MINIMIZE      = 0xF020
 MF_BYCOMMAND     = 0x00000000
 
 # Menu
@@ -275,8 +272,8 @@ def poll_minimize():
     """Call each tick — if console is visible but minimized, hide to tray.
 
     This is a workaround for console windows not supporting WndProc
-    subclassing: we can't intercept SC_MINIMIZE, but we can detect it
-    after the fact via IsIconic() and hide immediately."""
+    subclassing: CSRSS blocks WM_SYSCOMMAND interception, but we can
+    detect minimize after the fact via IsIconic() and hide immediately."""
     global _console_visible
     if not _console_visible:
         return

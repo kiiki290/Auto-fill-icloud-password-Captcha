@@ -5,7 +5,6 @@ Detects Edge by visible Chrome_WidgetWin_1 windows (avoids false positives
 from background msedge.exe processes that appear before the main window).
 
 Provides:
-  is_edge_running() -> bool
   EdgeLifecycleMonitor -- edge-triggered start/stop detection for daemon loops.
 """
 import ctypes
@@ -16,7 +15,7 @@ user32 = ctypes.windll.user32
 
 def _find_edge():
     """Internal: returns (is_running: bool, hwnd: int | None).
-    Single EnumWindows pass — both is_edge_running() and the monitor use this
+    Single EnumWindows pass used by the lifecycle monitor
     to avoid redundant enumeration."""
     found = False
     found_hwnd = None
@@ -44,13 +43,6 @@ def _find_edge():
     return found, found_hwnd
 
 
-def is_edge_running() -> bool:
-    """Check if Edge has a visible main window. More accurate than process
-    enumeration — won't trigger on background subprocesses at startup."""
-    running, _ = _find_edge()
-    return running
-
-
 class EdgeLifecycleMonitor:
     """Edge-triggered Edge window lifecycle detector.
 
@@ -66,7 +58,7 @@ class EdgeLifecycleMonitor:
         self._last_hwnd = None
 
     def poll(self) -> bool:
-        """Check Edge state. Returns current is_edge_running result."""
+        """Check Edge state. Returns True if Edge's main window is visible."""
         self._edge_running, hwnd = _find_edge()
         if self._edge_running and hwnd:
             self._last_hwnd = hwnd

@@ -82,20 +82,18 @@ def main():
 
 def _main():
     # ── single-instance guard ─────────────────────────────────────
-    # With --uac-admin the exe spawns an elevated copy; the unelevated
-    # original must exit immediately, otherwise two processes run.
-    if not ctypes.windll.shell32.IsUserAnAdmin():
-        return  # let the UAC-elevated copy take over
-
     mutex = kernel32.CreateMutexW(None, False, "iCloudAutoFill_Daemon")
     if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
         _die("Another instance is already running.\n\n"
              "Check the system tray for the iCloud Auto-Fill icon,\n"
              "or check daemon.log for details.")
 
-    # Hide console immediately — before any output — to avoid flash.
-    # tray.init() also hides it, but doing it here prevents the
-    # millisecond flash of the console appearing before the hide.
+    # Hide console before any output to avoid a visible flash.
+    # When built with PyInstaller --hide-console hide-early, the bootloader
+    # already handles this and this call is a no-op.  It matters for direct
+    # `python daemon.py` runs where no bootloader exists.
+    # tray.init() also calls _hide_console(), but doing it here prevents
+    # even a one-frame flash before the message loop starts.
     chwnd = kernel32.GetConsoleWindow()
     if chwnd:
         user32.ShowWindow(chwnd, 0)  # SW_HIDE

@@ -49,7 +49,7 @@ IDLE  ──Edge启动──▶  WAIT_EXTENSION (2s)  ──到时──▶  WAI
 - **动态轮询间隔**：IDLE 时 1s，active 时 0.5s
 
 ### 8. 日志
-`print()` 输出到终端，自带时间戳。零文件 IO。
+`print()` 输出到终端并写入 `daemon.log`，自带时间戳。
 
 ## 依赖
 
@@ -77,13 +77,13 @@ python auto_fill_icloud.py
 
 ```bash
 pip install pyinstaller
-pyinstaller --onedir --noconsole --uac-admin --name iCloudAutoFill daemon.py
+pyinstaller --onedir --uac-admin --hide-console hide-early --name iCloudAutoFill daemon.py
 ```
 
 产物在 `dist/iCloudAutoFill/`，其中 `iCloudAutoFill.exe` 为主程序入口。
 
 - `--onedir`：单进程（`--onefile` 会因 bootloader 解压产生双进程）
-- `--noconsole`：无控制台窗口，静默后台运行
+- `--hide-console hide-early`：bootloader 在 Python 启动前隐藏控制台窗口，避免闪烁；控制台子系统仍然存在（`console=True`），可通过托盘图标显示/隐藏
 - `--uac-admin`：启动时请求管理员权限（`BlockInput` 锁键盘需要）
 
 ## 文件结构
@@ -93,6 +93,7 @@ pyinstaller --onedir --noconsole --uac-admin --name iCloudAutoFill daemon.py
 ├── edge_uia.py            # Edge 窗口查找 + 输入法切换 + Alt+I 快捷键发送
 ├── edge_watcher.py        # Edge 窗口生命周期监控（窗口检测，非进程检测）
 ├── daemon.py              # 守护进程入口（状态机调度）
+├── tray.py                # 系统托盘集成（图标、菜单、控制台显示/隐藏）
 ├── tools/                 # 诊断/调试工具
 ├── requirements.txt
 ├── .gitignore
