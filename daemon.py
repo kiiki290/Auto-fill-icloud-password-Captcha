@@ -17,6 +17,7 @@ if sys.stdout is not None and not isinstance(sys.stdout, io.TextIOWrapper):
 import ctypes
 from datetime import datetime
 import os
+import time
 import traceback
 
 user32 = ctypes.windll.user32
@@ -51,15 +52,41 @@ def _log(msg, *args):
 # State machine constants
 # ---------------------------------------------------------------------------
 STATE_IDLE = 0
-STATE_WAIT_EXTENSION = 1   # waiting 2 s for extension to initialise
+STATE_WAIT_EXTENSION = 1   # waiting for Edge to finish loading (renderer child HWND)
 STATE_WAIT_CODE = 2        # polling for the verification dialog
 
+# Adaptive wait: poll EnumChildWindows for Chrome_RenderWidgetHostHWND.
+# That child appears once Edge has created the tab rendering surface —
+# a reliable "browser is done loading" signal.  Safety net at 15 s max.
 TICK_IDLE = 1.0              # main-loop sleep when Edge is not running (seconds)
 TICK_ACTIVE = 0.5            # main-loop sleep during auto-fill sequence
-WAIT_EXTENSION_TICKS = 4   # 4 × 0.5 s = 2 s
-WAIT_CODE_MAX_TICKS = 6    # 6 × 0.5 s = 3 s
+WAIT_EXTENSION_MIN_TICKS = 1
+WAIT_EXTENSION_MAX_TICKS = 30  # 30 × 0.5 s = 15 s
+WAIT_CODE_MAX_TICKS = 6       # 6 × 0.5 s = 3 s
 
-QS_ALLINPUT = 0x04FF       # MsgWaitForMultipleObjects wake mask
+QS_ALLINPUT = 0x04FF          # MsgWaitForMultipleObjects wake mask
+
+
+def _edge_has_renderer(ehwnd):
+    """Return True when Edge has created its tab rendering surface.
+    Chrome_RenderWidgetHostHWND is a child window that only appears
+    after the first browser tab has been fully created."""
+    if not ehwnd or not user32.IsWindow(ehwnd):
+        return False
+    found = False
+
+    def cb(child, _):
+        nonlocal found
+        class_buf = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(child, class_buf, 256)
+        if 'Chrome_RenderWidgetHostHWND' in class_buf.value:
+            found = True
+            return False  # stop enumeration
+        return True
+
+    WEP = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    user32.EnumChildWindows(ehwnd, WEP(cb), 0)
+    return found
 
 
 def _die(msg):
@@ -117,6 +144,7 @@ def _main():
     cached_dialog = None           # iCloud dialog HWND, skips EnumWindows on repeat
     last_code = None               # prevent re-filling the same code (spontaneous mode)
     input_locked = False           # track BlockInput state across ticks
+    edge_detected_at = 0.0         # timestamp when Edge first detected (for startup time log)
 
     try:
         while True:
@@ -138,7 +166,8 @@ def _main():
             # ── IDLE ────────────────────────────────────────────────
             if state == STATE_IDLE:
                 if monitor.edge_just_started():
-                    _log("Edge detected.  Waiting 2s for extension init…")
+                    edge_detected_at = time.time()
+                    _log("Edge detected. Waiting for renderer…")
                     tray.update_tooltip("iCloud Auto-Fill — Edge detected, initializing…")
                     last_code = None
                     state = STATE_WAIT_EXTENSION
@@ -148,7 +177,6 @@ def _main():
                     # ── spontaneous dialog monitoring ──────────────
                     # Edge is already running (not just started) —
                     # watch for verification dialogs that pop up later
-                    # (e.g. when the 2-hour code expires)
                     code, hwnd = find_code(pid_map, cached_dialog)
                     if hwnd:
                         cached_dialog = hwnd
@@ -169,6 +197,7 @@ def _main():
                                 type_code(code, lock=False)
                         finally:
                             if blocked:
+                                time.sleep(0)
                                 user32.BlockInput(False)
                         _log("Auto-fill done.")
                         tray.update_tooltip("iCloud Auto-Fill — Auto-fill completed")
@@ -180,11 +209,15 @@ def _main():
             # ── WAIT_EXTENSION ──────────────────────────────────────
             elif state == STATE_WAIT_EXTENSION:
                 tick += 1
-                if tick >= WAIT_EXTENSION_TICKS:
-                    _log("Triggering Alt+I…")
+                ehwnd = monitor.last_hwnd
+                ready = _edge_has_renderer(ehwnd)
+
+                if ready and tick >= WAIT_EXTENSION_MIN_TICKS:
+                    elapsed = time.time() - edge_detected_at
+                    _log("Edge ready after %.1fs, triggering Alt+I…", elapsed)
                     tray.update_tooltip("iCloud Auto-Fill — Sending Alt+I…")
                     # pass cached Edge HWND to avoid redundant EnumWindows
-                    pending_edge = trigger_icloud_extension(monitor.last_hwnd)
+                    pending_edge = trigger_icloud_extension(ehwnd)
 
                     # lock input immediately after shortcut
                     if not input_locked:
@@ -200,6 +233,37 @@ def _main():
                         finally:
                             restore_edge_keyboard(*pending_edge)
                         if input_locked:
+                            time.sleep(0)
+                            user32.BlockInput(False)
+                            input_locked = False
+                        _log("Auto-fill done.")
+                        tray.update_tooltip("iCloud Auto-Fill — Auto-fill completed")
+                        state = STATE_IDLE
+                        tick = 0
+                    else:
+                        state = STATE_WAIT_CODE
+                        tick = 0
+
+                elif tick >= WAIT_EXTENSION_MAX_TICKS:
+                    _log("Edge window not responding after %ds, triggering anyway…",
+                         WAIT_EXTENSION_MAX_TICKS // 2)
+                    tray.update_tooltip("iCloud Auto-Fill — Sending Alt+I…")
+                    pending_edge = trigger_icloud_extension(ehwnd)
+
+                    if not input_locked:
+                        input_locked = user32.BlockInput(True)
+
+                    code, hwnd = find_code(pid_map, cached_dialog)
+                    if hwnd:
+                        cached_dialog = hwnd
+                    if code:
+                        _log("Code: %s", code)
+                        try:
+                            type_code(code, lock=False)
+                        finally:
+                            restore_edge_keyboard(*pending_edge)
+                        if input_locked:
+                            time.sleep(0)
                             user32.BlockInput(False)
                             input_locked = False
                         _log("Auto-fill done.")
@@ -223,6 +287,7 @@ def _main():
                     finally:
                         restore_edge_keyboard(*pending_edge)
                     if input_locked:
+                        time.sleep(0)
                         user32.BlockInput(False)
                         input_locked = False
                     _log("Auto-fill done.")
